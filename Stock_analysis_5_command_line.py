@@ -1,0 +1,651 @@
+
+
+import sys
+import pandas as pd 
+import math
+import yfinance as yf
+from datetime import datetime, timedelta
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+###############################################################
+
+def attach_log_column(data):
+	log_column = [0]
+	#adj_column = data['Adj Close'].tolist()
+	adj_column = data['Close'].tolist()
+	#print(adj_column)
+
+	for i in range(1,len(adj_column)):
+		div_val = adj_column[i]/adj_column[i-1]
+		log_column.append(math.log(div_val) * 100)
+
+	data = data.assign(Log_Column=log_column)
+	#data.head()
+
+	return data
+
+###############################################################
+
+def moving_average(data,no_of_days): 
+
+	moving_avg = [None for i in range(no_of_days - 1)]
+	total = 0
+
+	for i in range(len(data)):
+		total = total + data['Close'][i]
+		if(i >= (no_of_days - 1)):
+			avg = total/no_of_days
+			total = total - data['Close'][i - (no_of_days - 1)]
+			moving_avg.append(avg)
+
+	return moving_avg
+
+###############################################################
+
+def correlation_of_two_columns(first_data,second_data, col):
+
+	list_1 = first_data[col].tolist()
+	list_2 = second_data[col].tolist()
+
+	m_1 = sum(list_1)/len(list_1)
+	m_2 = sum(list_2)/len(list_2)
+
+	numerator = 0
+	denom_1 = 0
+	denom_2 = 0
+
+	for i in range(len(list_1)):
+		numerator += ((list_1[i] - m_1) * (list_2[i] - m_2))
+		denom_1 += ((list_1[i] - m_1) * (list_1[i] - m_1))
+		denom_2 += ((list_2[i] - m_2) * (list_2[i] - m_2))
+		
+
+	denominator = math.sqrt(denom_1) * math.sqrt(denom_2)
+
+	corr = numerator/denominator
+
+	return corr
+
+
+###############################################################
+
+def moving_correlation(first_data, second_data, col,no_of_days):
+	list_1 = first_data[col].tolist()
+	list_2 = second_data[col].tolist()
+
+	moving_cor = [None for i in range(no_of_days - 1)]
+
+	m_1 = 0
+	m_2 = 0
+	s1 = 0
+	s2 = 0
+
+	numerator = 0
+	denom_1 = 0
+	denom_2 = 0
+	denominator = 0
+	k = 0
+
+	for i in range(len(list_1)):
+		s1 += list_1[i]
+		s2 += list_2[i]
+
+		if(i >= (no_of_days - 1)):
+			m_1 = s1/no_of_days
+			m_2 = s2/no_of_days
+     
+			for j in range(k,(k + no_of_days)):
+				numerator += ((list_1[j] - m_1) * (list_2[j] - m_2))
+				denom_1 += ((list_1[j] - m_1) * (list_1[j] - m_1))
+				denom_2 += ((list_2[j] - m_2) * (list_2[j] - m_2))
+
+
+			denominator = math.sqrt(denom_1) * math.sqrt(denom_2)
+
+			corr = numerator/denominator
+			moving_cor.append(corr)
+
+			s1 = s1 - list_1[i - (no_of_days - 1)]
+			s2 = s2 - list_2[i - (no_of_days - 1)]
+			k += 1
+			numerator = 0
+			denom_1 = 0
+			denom_2 = 0
+
+
+	return moving_cor
+
+
+###############################################################
+
+def Look_for_stats(stock_name,s_date, e_date = '', mdays = 30):
+
+	start_date = s_date
+
+	if(e_date != ''):
+		end_date = e_date
+
+	else:
+		end_date = datetime.now()
+
+	ticker = stock_name
+
+	data = yf.download(ticker,start_date,end_date)
+
+	#print(type(data))
+
+	data = attach_log_column(data)
+
+	#print("Printing last 5 rows of data:\n\n")
+	#print(data.head(n = 5))
+	#print("\n\n\n")
+
+	#################################################################################
+
+	## To print mean, standard deviation, kurtosis
+	
+	close_mean = data['Close'].mean()
+	standard_deviation_close = data['Close'].std()
+	kurtosis_close = data['Close'].kurtosis()
+
+	print("\nMean of close values : ",round(close_mean, 3))
+	print("standard deviation of close values : ",round(standard_deviation_close, 3))
+	print("Kurtosis of close values : ",round(kurtosis_close, 3))
+
+	#################################################################################
+
+	# Frequency distribution of returns
+
+	log_list = data['Log_Column'].tolist()
+	min_num = min(log_list)
+	max_num = max(log_list)
+	no_bins = round(max_num + (min_num * (-1)))
+
+	plt.hist(log_list, bins = no_bins, label = stock_name)
+
+	plt.title("Frequencies vs Return values", fontsize = 16)
+	plt.xlabel('Returns', fontsize = 14)
+	plt.ylabel('Frequencies', fontsize = 14)
+	plt.legend()
+
+	plt.show()
+
+	###############################################################################
+
+	# Plotting returns graph.
+
+	data['Log_Column'].plot(figsize = (10,7), style = '.')
+
+	plt.title('Return vs Year', fontsize = 16)
+	plt.xlabel("Year",fontsize = 14)
+	plt.ylabel("Return",fontsize = 14)
+
+	plt.grid(which = 'major', linestyle ='-', linewidth = 0.5)
+
+	plt.show()
+
+	###############################################################################
+	
+	# Plotting close value graph.
+
+	data['Close'].plot(figsize = (10,7),style = '-')
+
+	plt.title('Close vs Year', fontsize = 16)
+	plt.xlabel("Year",fontsize = 14)
+	plt.ylabel("Close values",fontsize = 14)
+	plt.grid(which = 'major', linestyle ='-', linewidth = 0.5)
+
+	plt.show()			
+
+	###############################################################################
+
+	# Moving average graph.
+
+	#no_of_days = int(input("Enter number of days: "))
+	moving_avg_hundred = moving_average(data,mdays)
+	moving_avg_2_hundred = moving_average(data,2*mdays)
+
+
+	plt.plot(data.index,moving_avg_hundred, label = str(mdays)+'_moving_avg')
+	plt.plot(data.index,moving_avg_2_hundred, label = str(mdays*2)+'_moving_avg')
+	data['Close'].plot(label = 'close', style = '-', figsize = (10,7))
+	plt.title('Close and moving averages of ' + stock_name, fontsize = 16)
+	plt.xlabel('Year',fontsize = 14)
+	plt.ylabel('Moving avg',fontsize = 14)
+	plt.legend()
+
+	plt.grid(which ='major', linestyle = '-.',linewidth = 0.5)
+	plt.show()
+
+##################################################################################################
+
+def Compare_2_stocks(first_stock,second_stock,s_date, e_date = '', mdays = 30, cdays = 30):
+
+	start_date = s_date
+
+	if(e_date != ''):
+		end_date = e_date
+
+	else:
+		end_date = datetime.now()
+
+	ticker1 = first_stock
+	first_data = yf.download(ticker1,start_date,end_date)
+	
+	ticker2 = second_stock
+	second_data = yf.download(ticker2,start_date,end_date)
+
+	first_data = attach_log_column(first_data)
+	second_data = attach_log_column(second_data)
+
+	# print("Last few rows of first stock data :\n\n")
+	# print(first_data.head(n = 5))
+	# print("\n\n\n")
+
+	# print("Last few row of second stock data : \n\n")
+	# print(second_data.head(n = 5))
+	# print("\n")
+
+	#################################################################################
+
+
+	# Mean, standard deviation, kurtosis
+
+	fmean_close = first_data['Close'].mean()
+	fstandard_deviation_close = first_data['Close'].std()
+	fkurtosis_close = first_data['Close'].kurtosis()
+
+	print("\nMean of close values of ", first_stock, ' : ', round(fmean_close,3))
+	print("standard deviation of close values of ",first_stock, ' : ', round(fstandard_deviation_close, 3))
+	print("Kurtosis of close values of ", first_stock, ' : ', round(fkurtosis_close, 3))
+	print("\n")
+
+	smean_close = second_data['Close'].mean()
+	sstandard_deviation_close = second_data['Close'].std()
+	skurtosis_close = second_data['Close'].kurtosis()
+
+	print("Mean of close values of ", second_stock, ' : ', round(smean_close, 3))
+	print("standard deviation of close values of ", second_stock , ' : ', round(sstandard_deviation_close, 3))
+	print("Kurtosis of close values of ", second_stock, ' : ',round(skurtosis_close, 3))
+	col = 'Log_Column' #input("Enter column name : ")
+	corr = correlation_of_two_columns(first_data, second_data, col)
+	print('Correlation = ',round(corr, 3))
+	print("\n")
+
+	#################################################################################
+
+	# Frequency distribution of return values.
+	
+	log_list_1 = first_data['Log_Column'].tolist()
+	log_list_2 = second_data['Log_Column'].tolist()
+
+	min_num = min(log_list_1)
+	max_num = max(log_list_1)
+	no_bins = round(max_num + (min_num * (-1)))
+
+	plt.figure(figsize = (10,7))
+	plt.hist([log_list_1, log_list_2], bins = no_bins, label = [first_stock, second_stock])
+	
+	plt.title('Frequencies vs Return values', fontsize = 16)
+	plt.xlabel('Returns', fontsize = 14)
+	plt.ylabel('Frequencies', fontsize = 14)
+	plt.legend()
+
+	plt.show()
+
+	#################################################################################
+		
+	# Graph of return values
+
+	first_data['Log_Column'].plot(figsize = (10,7), style = '.', label = first_stock)
+	second_data['Log_Column'].plot(figsize = (10,7), style = '.', label = second_stock)
+	plt.title('Return vs Year', fontsize = 16)
+	plt.xlabel("Year",fontsize = 14)
+	plt.ylabel("Return",fontsize = 14)
+	plt.legend()
+
+	plt.grid(which = 'major', linestyle ='-', linewidth = 0.5)
+
+	plt.show()
+
+	#################################################################################
+		
+	# Graph of close values and spread values.
+
+	first_data['Close'].plot(label = first_stock, figsize = (10,7),style = '-')
+	second_data['Close'].plot(label = second_stock, figsize = (10,7), style = '-')
+
+	spread = []
+
+	if(abs(first_data['Close'].mean() - second_data['Close'].mean()) > 200):
+
+		if(first_data['Close'].mean() > second_data['Close'].mean()):
+			scale = (first_data['Close'].mean()/second_data['Close'].mean()) - 1
+			scale = round(scale)
+
+			for i in range(len(first_data['Close'])):
+				spread.append(abs(first_data['Close'][i] - (second_data['Close'][i] * scale)))
+
+		else:
+			scale = (second_data['Close'].mean()/first_data['Close'].mean()) - 1
+			scale = round(scale)
+
+			for i in range(len(first_data['Close'])):
+				spread.append(abs(second_data['Close'][i] - (first_data['Close'][i] * scale)))
+
+	else:
+		scale = 1
+
+		for i in range(len(first_data['Close'])):
+				spread.append(abs(second_data['Close'][i] - (first_data['Close'][i] * scale)))
+
+	
+
+	plt.plot(first_data.index, spread, label = 'Spread x '+str(scale), linestyle = '-')
+	plt.title('[Close, Spread] vs Year', fontsize = 16)
+	plt.xlabel("Year",fontsize = 14)
+	plt.ylabel("Close values",fontsize = 14)
+	plt.legend()
+
+	plt.grid(which = 'major', linestyle ='-', linewidth = 0.5)
+
+	plt.show()
+
+	#################################################################################
+
+	# Moving averages of both data.
+
+	#no_of_days = int(input("Enter number of days for moving averages : "))
+	moving_avg_hundred = moving_average(first_data,mdays)
+	moving_avg_2_hundred = moving_average(second_data,mdays)
+
+
+	plt.plot(first_data.index,moving_avg_hundred, label = str(mdays)+'_moving_avg_'+first_stock)
+	plt.plot(second_data.index,moving_avg_2_hundred, label = str(mdays)+'_moving_avg_'+second_stock)
+	first_data['Close'].plot(label = first_stock+'_close', style = '-', figsize = (10,7))
+	second_data['Close'].plot(label = second_stock+'_close', style = '-', figsize = (10,7))
+	plt.title('CLose values and Moving avg', fontsize = 15)
+	plt.xlabel('Year',fontsize = 14)
+	plt.ylabel('Moving avg',fontsize = 14)
+	plt.legend()
+
+	plt.grid(which ='major', linestyle = '-.',linewidth = 0.5)
+	plt.show()
+
+	#################################################################################
+
+	# Moving correlation
+
+	#cdays = int(input("Enter number of days for moving Correlation : "))
+	moving_cor = moving_correlation(first_data, second_data, 'Log_Column', cdays)
+
+	plt.figure(figsize = (10,7))
+	plt.plot(first_data.index, moving_cor, label = str(cdays) + '_Moving_correlation')
+
+	plt.xlabel('Year',fontsize = 14)
+	plt.ylabel('Moving avg',fontsize = 14)
+	plt.title(first_stock +' and ' + second_stock + ' Moving Corr', fontsize = 15)
+
+	plt.legend()
+	plt.grid(which ='major', linestyle = '-.',linewidth = 0.5)
+
+	plt.show()
+
+	#################################################################################
+
+	x = first_data['Log_Column'].tolist()
+	y = second_data['Log_Column'].tolist()
+
+	x_mean = sum(x)/len(x)
+	y_mean = sum(y)/len(y)
+	numerator = 0
+	denominator = 0
+
+	for i in range(len(x)):
+		numerator += ((x[i] - x_mean) * (y[i] - y_mean))
+		denominator += ((x[i] - x_mean) * (x[i] -  x_mean))
+
+	#slope
+	SL = numerator/denominator
+	#intercept
+	IC = y_mean - (SL * x_mean)
+
+	output = []
+
+	for i in x:
+		output.append((SL * i) + IC)
+
+	print('Slope of linear fit line = ', SL)
+	print('Intercept of linear fil line = ', IC)
+
+	plt.figure(figsize = (10,7))
+	plt.scatter(x,y, label = 'Return_value_points')
+	plt.plot(x,output, 'r', label = 'Linear_fit_line')
+	plt.title('Linear fit of returns', fontsize = 15)
+	plt.xlabel(first_stock, fontsize = 14)
+	plt.ylabel(second_stock, fontsize = 14)
+	plt.legend()
+	plt.grid(which ='major', linestyle = '-.',linewidth = 0.5)
+	plt.show()
+
+
+###############################################################
+
+def give_date(year, month, day):
+
+	date = year + '-' + month + '-' + day
+	date = datetime.strptime(date, '%Y-%m-%d')
+
+	return date
+
+###############################################################
+
+n = len(sys.argv)
+
+#name ticker days 	3
+if(n == 3):
+	date = datetime.now() - timedelta(days = int(sys.argv[2]), hours = datetime.now().hour)
+	
+	Look_for_stats(sys.argv[1], date)
+
+#name ticker1 ticker2 days 	4
+#name ticker days mdays 	4
+elif(n == 4):
+
+	if(sys.argv[2][:1] < 'A'):
+		date = datetime.now() - timedelta(days = int(sys.argv[2]), hours = datetime.now().hour)
+		
+		Look_for_stats(sys.argv[1], date, '',int(sys.argv[3]))
+
+	else:
+		date = datetime.now() - timedelta(days = int(sys.argv[3]), hours = datetime.now().hour)
+		
+		Compare_2_stocks(sys.argv[1],sys.argv[2],date)
+
+#name ticker1 year month day 	5
+#name ticker1 ticker2 days mdays	5 
+elif(n == 5):
+
+	if(sys.argv[2][:1] < 'A'):
+		s_date = give_date(sys.argv[2], sys.argv[3], sys.argv[4])
+		
+		Look_for_stats(sys.argv[1], s_date)
+
+	else:
+		s_date = datetime.now() - timedelta(days = int(sys.argv[3]), hours = datetime.now().hour)
+		
+		Compare_2_stocks(sys.argv[1], sys.argv[2], s_date, datetime.now(), int(sys.argv[4]))
+
+
+elif(n == 6):
+
+	if(sys.argv[2][:1] < 'A'):
+
+		#name ticker1 year month day mdays 	6	-d
+		if(int(sys.argv[5]) <= 100):
+			s_date = give_date(sys.argv[2], sys.argv[3], sys.argv[4])
+		
+			Look_for_stats(sys.argv[1], s_date, datetime.now(), int(sys.argv[5]))
+
+		# name ticker year month day days 	6	- d	
+		else:
+			s_date = give_date(sys.argv[2], sys.argv[3], sys.argv[4])
+			e_date = s_date + timedelta(days = int(sys.argv[5]))
+
+			Look_for_stats(sys.argv[1], s_date, e_date)
+
+	else:
+		#name ticker1 ticker2 year month day 	6	- d
+		if(int(sys.argv[4]) <= 12):
+			s_date = give_date(sys.argv[3], sys.argv[4], sys.argv[5])
+		
+			Compare_2_stocks(sys.argv[1], sys.argv[2], s_date)
+
+		#name ticker1 ticker2 days mdays cdays	6	- d
+		else:
+			s_date = datetime.now() - timedelta(days = int(sys.argv[3]), hours = datetime.now().hour)
+		
+			Compare_2_stocks(sys.argv[1], sys.argv[2], s_date, '', int(sys.argv[4]), int(sys.argv[5]))
+
+elif(n == 7):
+
+	if(sys.argv[2][:1] < 'A'):
+		# name ticker year month day days mdays		7	-d
+		s_date = give_date(sys.argv[2], sys.argv[3], sys.argv[4])
+		e_date = s_date + timedelta(days = int(sys.argv[5]))
+
+		Look_for_stats(sys.argv[1], s_date, e_date, int(sys.argv[6]))
+
+	else:
+
+		if(int(sys.argv[6]) <= 100):
+			#name ticker1 ticker2 year month day mdays 7	- d
+			s_date = give_date(sys.argv[3], sys.argv[4], sys.argv[5])
+
+			Compare_2_stocks(sys.argv[1], sys.argv[2], s_date, '', int(sys.argv[6]))
+
+		else:
+			# name ticker1 ticker2 year month day days 7	- d
+			s_date = give_date(sys.argv[3], sys.argv[4], sys.argv[5])
+			e_date = s_date + timedelta(days = int(sys.argv[6]))
+
+			Compare_2_stocks(sys.argv[1], sys.argv[2], s_date, e_date)
+
+
+elif(n == 8):
+
+	if(sys.argv[2][:1] < 'A'):
+		# name ticker year month day  year month day 	8	-d
+		s_date = give_date(sys.argv[2], sys.argv[3], sys.argv[4])
+		e_date = give_date(sys.argv[5], sys.argv[6], sys.argv[7])
+
+		Look_for_stats(sys.argv[1], s_date, e_date)
+
+	else:
+		#name ticker1 ticker2 year month day mdays cdays	8 	-d
+		if(int(sys.argv[6]) <= 100):
+			s_date = give_date(sys.argv[3], sys.argv[4], sys.argv[5])
+
+			Compare_2_stocks(sys.argv[1], sys.argv[2], s_date, '', int(sys.argv[6]), int(sys.argv[7]))
+
+		# name ticker1 ticker2 year month day days mdays 8	-d
+		else:
+
+			s_date = give_date(sys.argv[3], sys.argv[4], sys.argv[5])
+			e_date = s_date + timedelta(days = int(sys.argv[6]))
+
+			Compare_2_stocks(sys.argv[1], sys.argv[2], s_date, e_date, int(sys.argv[7]))
+
+elif(n == 9):
+
+	# name ticker year month day  year month day mdays	9	-d
+	if(sys.argv[2][:1] < 'A'):
+
+		s_date = give_date(sys.argv[2], sys.argv[3], sys.argv[4])
+		e_date = give_date(sys.argv[5], sys.argv[6], sys.argv[7])
+
+		Look_for_stats(sys.argv[1], s_date, e_date, int(sys.argv[8]))
+
+	else:
+		# name ticker1 ticker2 year month day year month day 	9 -d
+		if(int(sys.argv[7]) <= 12):
+
+			s_date = give_date(sys.argv[3],sys.argv[4], sys.argv[5])
+			e_date = give_date(sys.argv[6], sys.argv[7], sys.argv[8])
+
+			Compare_2_stocks(sys.argv[1], sys.argv[2], s_date, e_date)
+
+		else:
+			# name ticker1 ticker2 year month day days mdays cdays 9	-d
+			s_date = give_date(sys.argv[3],sys.argv[4], sys.argv[5])
+			e_date = s_date + timedelta(days = int(sys.argv[6]))
+
+			Compare_2_stocks(sys.argv[1], sys.argv[2], s_date, e_date, int(sys.argv[7]),int(sys.argv[8]))
+
+
+# name ticker1 ticker2 year month day year month day mdays	10
+elif(n == 10):
+
+	s_date = give_date(sys.argv[3], sys.argv[4], sys.argv[5])
+	e_date = give_date(sys.argv[6], sys.argv[7], sys.argv[8])
+	Compare_2_stocks(sys.argv[1], sys.argv[2], s_date, e_date, int(sys.argv[9]))
+
+# name ticker1 ticker2 year month day year month day mdays cdays 11
+elif(n == 11):
+
+	s_date = give_date(sys.argv[3], sys.argv[4], sys.argv[5])
+	e_date = give_date(sys.argv[6], sys.argv[7], sys.argv[8])
+	Compare_2_stocks(sys.argv[1], sys.argv[2], s_date, e_date, int(sys.argv[9]), int(sys.argv[10]))
+
+
+else:
+
+	print("In this program we have two Funtions: ")
+	print("1 : Look_for_stats()\n2 : Compare_2_stocks()")
+	print("\nFunction Description:")
+	print("\nStart and end date format = yyyy mm dd")
+	print("no_of_days_before_today and no_of_days_after_start_date are assumed to be more than 100 days\n")
+	print("1: Look_for_stats(stock_symbol, start_date, end_date, moving_average_days)")
+	print("""\nDefault Values for this funtion:\n
+		stock_symbol = [No Default Value]\n
+		start_date = [No Default Value]\n
+		end_date = [todays date]\n
+		moving_average_days = [30]\n
+		""")
+	
+	print("\nNo. of ways you can give parameters to Function:")
+	print("""\n
+		1) program_name stock_symbol no_of_days_before_today\n
+		2) program_name stock_symbol no_of_days_before_today moving_average_days\n
+		3) program_name stock_symbol start_date\n
+		4) program_name stock_symbol start_date moving_average_days\n
+		5) program_name stock_symbol start_date no_of_days_after_start_sate\n
+		6) program_name stock_symbol start_date no_of_days_aafter_start_date moving_avg_days\n
+		7) program_name stock_symbol start_date end_date\n
+		8) program_name stock_symbol start_date end_date moving_avg_days\n
+		""")
+	print("2 : Compare_2_stocks(stock_symbol_1, stock_symbol_2, start_date, end_date, moving_average_days, moving_correlation_days)")
+	print("""\nDefault Values for this function:\n
+		stock_symbol_1 = [No Default Value]\n
+		stock_symbol_2 = [No Default Value]\n
+		start_date = [No Default Value]\n
+		end_date = [todays date]\n
+		moving_average_days = [30]\n
+		moving_correlation_days = [30]\n
+		""")
+	print("\nNo. of ways you can give parameters to function : ")
+	print("""\n
+		1) program_name stock_symbol_1 stock_symbol_2 no_of_days_before_today\n
+		2) program_name stock_symbol_1 stock_symbol_2 no_of_days_before_today moving_average_days\n
+		3) program_name stock_symbol_1 stock_symbol_2 start_date\n
+		4) program_name stock_symbol_1 stock_symbol_2 no_of_days_before_today moving_average_days moving_correlation_days\n
+		5) program_name stock_symbol_1 stock_symbol_2 start_date moving_average_days\n
+		6) program_name stock_symbol_1 stock_symbol_2 start_date no_of_days_after_start_date\n
+		7) program_name stock_symbol_1 stock_symbol_2 start_date moving_average_days moving_correlation_days\n
+		8) program_name stock_symbol_1 stock_symbol_2 start_date no_of_days_after_start_date moving_average_days\n
+		9) program_name stock_symbol_1 stock_symbol_2 start_date end_date\n
+		10) program_name stock_symbol_1 stock_symbol_2 start_date no_of_days_after_start_date moving_average_days moving_correlation_days\n
+		11) program_name stock_symbol_1 stock_symbol_2 start_date end_date moving_average_days\n
+		12) program_name stock_symbol_1 stock_symbol_2 start_date end_date moving_average_days moving_correlation_days\n
+		""")
